@@ -127,12 +127,24 @@ async function refreshHeader() {
 function addForm() {
   const card = el("section", { className: "card" });
   card.append(el("h2", {}, "Add client"));
+  card.append(el("p", { className: "muted" }, "Optional — fill in all three to also register this client in LB Web, so they don't have to enter details on the device."));
   const form = el("form", { className: "form-row" });
-  const name = el("input", { name: "name", required: true, maxLength: 50, placeholder: "Jane Doe" });
+  const name = el("input", { name: "name", required: true, maxLength: 45, placeholder: "Jane Doe" });
   const phone = el("input", { name: "phone", required: true, inputMode: "numeric", placeholder: "010-1234-5678" });
+  const gender = el("select", { name: "gender" });
+  gender.append(
+    el("option", { value: "" }, ""),
+    el("option", { value: "M" }, "Male (M)"),
+    el("option", { value: "F" }, "Female (F)"),
+  );
+  const birthDay = el("input", { name: "birthDay", type: "date" });
+  const height = el("input", { name: "height", type: "number", min: "0.1", max: "299.9", step: "0.1", placeholder: "175.0" });
   form.append(
     field("Name", name),
     field("Phone", phone),
+    field("Gender", gender),
+    field("Birth date", birthDay),
+    field("Height (cm)", height),
     el("button", { className: "primary", type: "submit" }, "Add"),
   );
   form.addEventListener("submit", async (event) => {
@@ -143,9 +155,9 @@ function addForm() {
       const result = await request("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.value, phone: phone.value }),
+        body: JSON.stringify({ name: name.value, phone: phone.value, gender: gender.value, birthDay: birthDay.value, height: height.value }),
       });
-      showNotice(`Client added.${result.linkedCount ? ` ${result.linkedCount} measurements linked.` : ""}`);
+      showNotice(addClientMessage(result));
       await loadRoute();
       refreshHeader();
     } catch (error) {
@@ -156,6 +168,20 @@ function addForm() {
   });
   card.append(form);
   return card;
+}
+
+function addClientMessage(result) {
+  const messages = {
+    registered: "Client added and registered in LB Web.",
+    already_exists: "Client added. This ID already exists in LB Web, so it was not registered again.",
+    skipped_limit: "Client added. LB Web registration skipped: daily API limit reached.",
+    skipped_not_configured: "Client added. LB Web registration skipped: InBody API key is not set.",
+    not_requested: "Client added.",
+  };
+  const message = result.lbweb?.status === "failed"
+    ? `Client added, but LB Web registration failed: ${result.lbweb.message} Enter the details on the device instead.`
+    : (messages[result.lbweb?.status] || "Client added.");
+  return `${message}${result.linkedCount ? ` ${result.linkedCount} measurements linked.` : ""}`;
 }
 
 function field(label, input) {

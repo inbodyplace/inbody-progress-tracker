@@ -8,6 +8,7 @@ Other official samples such as webhook-server, data-viewer, and fitness-crm focu
 
 - Link measurements to your own client list by phone number.
 - Show progress since the first measurement.
+- Register clients in LB Web from your app, so they do not have to enter details on the device.
 - Stay within the daily API limit: one action makes at most one API call.
 - Safely expose the app with ngrok by using Basic Auth and a webhook header.
 
@@ -39,7 +40,8 @@ A webhook does not contain body-composition values. It only says that a measurem
 | ----------------------------------------- | ---------------: |
 | Incoming webhook                          |        At most 1 |
 | Opening pages                             |                0 |
-| Add, edit, or delete a client             |                0 |
+| Add a client | 0 (at most 1 when LB Web registration fields are filled) |
+| Edit or delete a client | 0 |
 | Refetch a failed or temporary measurement |        At most 1 |
 
 The normal daily InBody API limit is 500 calls. This app keeps 50 calls in reserve, so it stops at 450 by default. The reserve leaves room for calls made with the same key outside this app, for example in Postman.
@@ -149,6 +151,8 @@ Each webhook uses one API call. Sending the same webhook twice does not call the
 If you changed `WEBHOOK_HEADER_NAME`, use that name instead of `X-InBody-Secret`.
 If nothing changes in the app, that measurement may already be stored from an earlier try. The app skips measurements it already has, so it does not call the API again. Delete the client and its measurements, or try the other measurement time.
 
+The sandbox also supports LB Web user registration. It saves the registered user, so adding the same phone number twice returns `already_exists` after the first registration.
+
 ## Receive webhooks with ngrok
 
 `localhost` is only available on your computer. ngrok creates a temporary public address so the InBody server can send a webhook to your app.
@@ -178,6 +182,10 @@ The free ngrok address changes each time ngrok starts. Register the new address 
 ## Using the app
 
 When you add a client, use the **same phone number** that is entered on the InBody device. Then measure the client using that phone number on the device.
+
+Gender, birth date, and height are optional. Fill in all three when you add a client to also register that client in LB Web. The device can then use the registered details instead of asking the client to enter them.
+
+The result message tells you what happened: `registered` means LB Web accepted the new user; `already_exists` means the ID was already present and was left unchanged; `failed` means the client was saved here but the details must be entered on the device; and `skipped_limit` or `skipped_not_configured` means no LB Web request was sent.
 
 | Event         | Linking rule                                                                                                                 |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -214,7 +222,7 @@ inbody-progress-tracker/
 | `GET`    | `/api/status`                   | Returns daily usage and webhook status.                                               |            0 |
 | `GET`    | `/api/customers`                | Lists clients and successful measurements.                                            |            0 |
 | `GET`    | `/api/customers/:id`            | Returns one client and all linked measurements.                                       |            0 |
-| `POST`   | `/api/customers`                | Adds a client and links matching unlinked measurements.                               |            0 |
+| `POST`   | `/api/customers`                | Adds a client, links matching measurements, and optionally registers the client in LB Web. |          0–1 |
 | `PUT`    | `/api/customers/:id`            | Updates a client and links newly matching measurements.                               |            0 |
 | `DELETE` | `/api/customers/:id`            | Deletes a client and clears measurement links.                                        |            0 |
 | `POST`   | `/api/measurements/:id/refetch` | Retries an `error` or `skipped_temp` measurement.                                     |    At most 1 |
@@ -247,6 +255,6 @@ Restart the server after every `.env` change.
 
 ## Data stored
 
-The app stores only five measurement values: skeletal muscle mass, body fat mass, percent body fat, visceral fat level, and basal metabolic rate. It does not store the full InBody API response, including names, dates of birth, or other personal data returned by the API.
+The app stores only five measurement values: skeletal muscle mass, body fat mass, percent body fat, visceral fat level, and basal metabolic rate. It does not store the full InBody API response, including names, dates of birth, or other personal data returned by the API. Gender, birth date, and height are sent to LB Web only and are not stored in this app.
 
 The daily usage counter can count only calls made by this app. It cannot see calls made with the same API key by other tools or services.

@@ -8,7 +8,7 @@ const basicAuthUser = process.env.BASIC_AUTH_USER || "admin";
 const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD || "";
 const authEnabled = Boolean(basicAuthPassword);
 
-const { createCustomer, deleteCustomer, getCustomer, getStatus, listCustomers, ping, updateCustomer } = await import("./db.js");
+const { createCustomer, deleteCustomer, getCustomer, getStatus, listCustomers, ping, reserveApiCall, updateCustomer } = await import("./db.js");
 const { createInbodyClient } = await import("./inbody/client.js");
 const { createWebhookHandler } = await import("./inbody/webhook.js");
 const { maskPhone } = await import("./inbody/transform.js");
@@ -84,12 +84,67 @@ app.get("/api/status", async (_request, response) => {
   }
 });
 
-function customerInput(body) {
+function localDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function lbWebInput(body) {
+  const gender = String(body?.gender ?? "").trim();
+  const birthDay = String(body?.birthDay ?? "").trim();
+  const heightInput = String(body?.height ?? "").trim();
+  if (![gender, birthDay, heightInput].some(Boolean)) return { requested: false };
+  if (![gender, birthDay, heightInput].every(Boolean)) {
+    return { error: "To register in LB Web, fill in gender, birth date, and height." };
+  }
+  if (!["M", "F"].includes(gender)) return { error: "Gender must be M or F." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDay)) return { error: "Birth date must be a valid date." };
+  const [year, month, day] = birthDay.split("-").map(Number);
+  const birthDate = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (birthDate.getFullYear() !== year || birthDate.getMonth() !== month - 1 || birthDate.getDate() !== day || birthDate > today) {
+    return { error: "Birth date must be a valid date in the past." };
+  }
+  const age = today.getFullYear() - year - (today < new Date(today.getFullYear(), month - 1, day) ? 1 : 0);
+  if (age < 1 || age > 99) return { error: "Age calculated from birth date must be between 1 and 99." };
+  if (!/^\d+(\.\d)?$/.test(heightInput) || Number(heightInput) <= 0 || Number(heightInput) >= 300) {
+    return { error: "Height must be greater than 0 and less than 300, with at most one decimal place." };
+  }
+  return { requested: true, gender, birthDay, age, height: Number(heightInput).toFixed(1) };
+}
+
+function customerInput(body, includeLbWeb = false) {
   const name = String(body?.name ?? "").trim();
   const phone = String(body?.phone ?? "").replace(/\D/g, "");
-  if (!name || name.length > 50) return { error: "Name must be 1–50 characters." };
+  const maxNameLength = includeLbWeb ? 45 : 50;
+  if (!name || name.length > maxNameLength) return { error: `Name must be 1–${maxNameLength} characters.` };
   if (!/^\d{10,11}$/.test(phone)) return { error: "Phone number must be 10–11 digits." };
-  return { name, phone };
+  if (!includeLbWeb) return { name, phone };
+  const lbweb = lbWebInput(body);
+  return lbweb.error ? lbweb : { name, phone, lbweb };
+}
+
+async function registerInLbWeb(customer, lbweb) {
+  if (!lbweb.requested) return { status: "not_requested" };
+  if (!client.isConfigured()) return { status: "skipped_not_configured" };
+  try {
+    const today = localDate();
+    const allowedCalls = Math.max(0, dailyLimit - reserve);
+    if (!(await reserveApiCall({ date: today, limit: allowedCalls }))) return { status: "skipped_limit" };
+    return await client.registerUser({
+      name: customer.name,
+      id: customer.phone,
+      phone: customer.phone,
+      gender: lbweb.gender,
+      age: String(lbweb.age),
+      height: lbweb.height,
+      birthDay: lbweb.birthDay,
+      userRegDate: today,
+    });
+  } catch (error) {
+    return { status: "failed", message: error.message };
+  }
 }
 
 function customerError(response, error) {
@@ -116,10 +171,11 @@ app.get("/api/customers/:id", async (request, response) => {
 });
 
 app.post("/api/customers", async (request, response) => {
-  const input = customerInput(request.body);
+  const input = customerInput(request.body, true);
   if (input.error) return response.status(400).json({ error: input.error });
   try {
-    response.status(201).json(await createCustomer(input));
+    const result = await createCustomer(input);
+    response.status(201).json({ ...result, lbweb: await registerInLbWeb(result.customer, input.lbweb) });
   } catch (error) {
     customerError(response, error);
   }
