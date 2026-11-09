@@ -12,3 +12,103 @@ export const pool = mysql.createPool({
 export async function ping() {
   await pool.query("SELECT 1");
 }
+
+export async function createMeasurement({ inbodyUserId, telHp, testAt, status }) {
+  try {
+    const [result] = await pool.execute(
+      "INSERT INTO measurements (inbody_user_id, tel_hp, test_at, status) VALUES (?, ?, ?, ?)",
+      [inbodyUserId, telHp || null, testAt, status],
+    );
+    return { created: true, measurement: await getMeasurement(result.insertId) };
+  } catch (error) {
+    if (error.code !== "ER_DUP_ENTRY") throw error;
+    return { created: false, measurement: await getMeasurementByKey(inbodyUserId, testAt) };
+  }
+}
+
+export async function getMeasurement(id) {
+  const [rows] = await pool.execute("SELECT * FROM measurements WHERE id = ?", [id]);
+  return rows[0] || null;
+}
+
+export async function getMeasurementByKey(inbodyUserId, testAt) {
+  const [rows] = await pool.execute(
+    "SELECT * FROM measurements WHERE inbody_user_id = ? AND test_at = ?",
+    [inbodyUserId, testAt],
+  );
+  return rows[0] || null;
+}
+
+export async function findCustomerByPhone(phone) {
+  const [rows] = await pool.execute("SELECT id FROM customers WHERE phone = ?", [phone]);
+  return rows[0] || null;
+}
+
+export async function linkMeasurementToCustomer(id, customerId) {
+  await pool.execute("UPDATE measurements SET customer_id = ? WHERE id = ? AND customer_id IS NULL", [customerId, id]);
+  return getMeasurement(id);
+}
+
+export async function saveMeasurementSuccess(id, metrics) {
+  await pool.execute(
+    "UPDATE measurements SET smm = ?, bfm = ?, pbf = ?, vfa_level = ?, bmr = ?, status = 'success', error_message = NULL WHERE id = ?",
+    [metrics.smm, metrics.bfm, metrics.pbf, metrics.vfaLevel, metrics.bmr, id],
+  );
+  return getMeasurement(id);
+}
+
+export async function saveMeasurementError(id, message) {
+  await pool.execute("UPDATE measurements SET status = 'error', error_message = ? WHERE id = ?", [message, id]);
+  return getMeasurement(id);
+}
+
+export async function claimRefetch(id) {
+  const [result] = await pool.execute(
+    "UPDATE measurements SET status = 'pending' WHERE id = ? AND status IN ('error', 'skipped_temp')",
+    [id],
+  );
+  if (result.affectedRows) return { state: "claimed", measurement: await getMeasurement(id) };
+  const measurement = await getMeasurement(id);
+  return measurement ? { state: "conflict", measurement } : { state: "missing", measurement: null };
+}
+
+export async function reserveApiCall({ date, limit }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "INSERT INTO api_usage (usage_date, call_count) VALUES (?, 0) ON DUPLICATE KEY UPDATE usage_date = VALUES(usage_date)",
+      [date],
+    );
+    const [rows] = await connection.execute("SELECT call_count FROM api_usage WHERE usage_date = ? FOR UPDATE", [date]);
+    const used = rows[0]?.call_count ?? 0;
+    if (used >= limit) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.execute("UPDATE api_usage SET call_count = call_count + 1 WHERE usage_date = ?", [date]);
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getStatus({ date, limit, reserve }) {
+  const [[usageRows], [latestRows], [unlinkedRows]] = await Promise.all([
+    pool.execute("SELECT call_count FROM api_usage WHERE usage_date = ?", [date]),
+    pool.execute("SELECT received_at FROM measurements ORDER BY received_at DESC, id DESC LIMIT 1"),
+    pool.execute("SELECT COUNT(*) AS count FROM measurements WHERE customer_id IS NULL"),
+  ]);
+  return {
+    date,
+    used: usageRows[0]?.call_count ?? 0,
+    limit,
+    reserve,
+    lastWebhookAt: latestRows[0]?.received_at ?? null,
+    unlinkedCount: unlinkedRows[0].count,
+  };
+}
