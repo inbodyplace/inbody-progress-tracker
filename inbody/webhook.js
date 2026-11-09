@@ -9,7 +9,8 @@ import {
 } from "../db.js";
 import { digits, toMetrics } from "./transform.js";
 
-const notConfigured = "InBody API is not configured. Set INBODY_ACCOUNT and INBODY_API_KEY in .env.";
+const notConfigured =
+  "InBody API is not configured. Set INBODY_ACCOUNT and INBODY_API_KEY in .env.";
 const dailyLimitReached = "Daily InBody API limit reached. Try again tomorrow.";
 
 function localDate() {
@@ -19,15 +20,27 @@ function localDate() {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-export function createWebhookHandler({ client, dailyLimit = 500, reserve = 50 }) {
+export function createWebhookHandler({
+  client,
+  dailyLimit = 500,
+  reserve = 50,
+}) {
   const allowedCalls = Math.max(0, dailyLimit - reserve);
 
   async function fetchAndSave(measurement) {
-    if (!client.isConfigured()) return saveMeasurementError(measurement.id, notConfigured);
-    const reserved = await reserveApiCall({ date: localDate(), limit: allowedCalls });
-    if (!reserved) return saveMeasurementError(measurement.id, dailyLimitReached);
+    if (!client.isConfigured())
+      return saveMeasurementError(measurement.id, notConfigured);
+    const reserved = await reserveApiCall({
+      date: localDate(),
+      limit: allowedCalls,
+    });
+    if (!reserved)
+      return saveMeasurementError(measurement.id, dailyLimitReached);
     try {
-      const data = await client.fetchMeasurement({ userId: measurement.inbody_user_id, testAt: measurement.test_at });
+      const data = await client.fetchMeasurement({
+        userId: measurement.inbody_user_id,
+        testAt: measurement.test_at,
+      });
       return saveMeasurementSuccess(measurement.id, toMetrics(data));
     } catch (error) {
       return saveMeasurementError(measurement.id, error.message);
@@ -37,7 +50,9 @@ export function createWebhookHandler({ client, dailyLimit = 500, reserve = 50 })
   async function connectCustomer(measurement) {
     if (measurement.customer_id || !measurement.tel_hp) return measurement;
     const customer = await findCustomerByPhone(measurement.tel_hp);
-    return customer ? linkMeasurementToCustomer(measurement.id, customer.id) : measurement;
+    return customer
+      ? linkMeasurementToCustomer(measurement.id, customer.id)
+      : measurement;
   }
 
   async function handleWebhook(payload) {
@@ -61,7 +76,9 @@ export function createWebhookHandler({ client, dailyLimit = 500, reserve = 50 })
       throw error;
     }
     if (claim.state === "conflict") {
-      const error = Error("Measurement cannot be refetched in its current status.");
+      const error = Error(
+        "Measurement cannot be refetched in its current status.",
+      );
       error.code = "CONFLICT";
       throw error;
     }

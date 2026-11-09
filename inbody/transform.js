@@ -18,5 +18,7 @@ export const digits = (value) => String(value ?? "").replace(/\D/g, "");
 
 export function maskPhone(value) {
   const phone = digits(value);
-  return phone.length < 4 ? "****" : `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+  return phone.length < 4
+    ? "****"
+    : `${phone.slice(0, 3)}****${phone.slice(-4)}`;
 }
