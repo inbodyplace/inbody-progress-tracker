@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment variables (API keys, passwords)
+.env
+.env.*
+!.env.example
+
+# Real member data (never commit)
+private/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
