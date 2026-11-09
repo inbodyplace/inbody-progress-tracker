@@ -4,8 +4,69 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>InBody Progress Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+      :root { color: #1f2937; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: wait; opacity: .65; }
+      .shell { max-width: 960px; margin: 0 auto; padding: 20px; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 17px; margin-bottom: 24px; }
+      .brand { color: #111827; font-size: 1.25rem; font-weight: 700; text-decoration: none; }
+      .status { color: #475569; display: flex; flex-wrap: wrap; font-size: .85rem; gap: 7px 16px; justify-content: flex-end; }
+      .status small { color: #64748b; }
+      .unlinked { border-bottom: 1px dotted #64748b; }
+      .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 18px; }
+      .card h2, .card h3 { margin: 0 0 14px; }
+      .form-row { align-items: end; display: grid; gap: 12px; grid-template-columns: 1fr 1fr auto; }
+      label { color: #475569; display: grid; font-size: .85rem; gap: 5px; }
+      input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 9px 10px; width: 100%; }
+      .primary, .secondary, .danger, .metric-button { border: 0; border-radius: 6px; padding: 9px 12px; }
+      .primary { background: #2563eb; color: #fff; }
+      .secondary, .metric-button { background: #e2e8f0; color: #1e293b; }
+      .danger { background: #b91c1c; color: #fff; }
+      .metric-button.active { background: #1d4ed8; color: #fff; }
+      .message { border-radius: 6px; margin: 0 0 16px; padding: 10px 12px; }
+      .message.success { background: #eff6ff; color: #1d4ed8; }
+      .message.error { background: #fef2f2; color: #b91c1c; }
+      .table-wrap { overflow-x: auto; }
+      table { border-collapse: collapse; min-width: 660px; width: 100%; }
+      th, td { border-bottom: 1px solid #e2e8f0; padding: 12px 10px; text-align: left; vertical-align: middle; }
+      th { color: #64748b; font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; }
+      tbody tr.clickable { cursor: pointer; }
+      tbody tr.clickable:hover { background: #f8fafc; }
+      .muted { color: #64748b; }
+      .detail-head { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+      .detail-head h2 { margin: 0 0 4px; }
+      .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .metrics { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .metric { min-height: 132px; }
+      .metric h3 { color: #475569; font-size: .8rem; font-weight: 600; line-height: 1.35; }
+      .metric-value { font-size: 1.3rem; font-weight: 700; }
+      .change { color: #334155; margin-top: 4px; }
+      .since { color: #64748b; font-size: .8rem; margin-top: 8px; }
+      .metric-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+      .chart-wrap { height: 300px; position: relative; }
+      .status-tag { color: #475569; font-size: .85rem; font-weight: 600; }
+      .error-text { color: #b91c1c; display: block; font-size: .78rem; margin-top: 4px; max-width: 250px; }
+      .empty { color: #64748b; padding: 24px 0 8px; text-align: center; }
+      @media (max-width: 700px) {
+        .shell { padding: 14px; }
+        .topbar { align-items: flex-start; flex-direction: column; gap: 8px; }
+        .status { justify-content: flex-start; }
+        .form-row { grid-template-columns: 1fr; }
+        .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .detail-head { align-items: flex-start; flex-direction: column; }
+      }
+    </style>
   </head>
   <body>
-    <h1>InBody Progress Tracker</h1>
+    <main class="shell">
+      <header id="header"></header>
+      <section id="page"></section>
+    </main>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

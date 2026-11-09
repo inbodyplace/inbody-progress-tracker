@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const { getStatus, ping } = await import("./db.js");
+const { createCustomer, deleteCustomer, getCustomer, getStatus, listCustomers, ping, updateCustomer } = await import("./db.js");
 const { createInbodyClient } = await import("./inbody/client.js");
 const { createWebhookHandler } = await import("./inbody/webhook.js");
 const { maskPhone } = await import("./inbody/transform.js");
@@ -64,6 +64,68 @@ app.get("/api/status", async (_request, response) => {
     const now = new Date();
     const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     response.json(await getStatus({ date, limit: dailyLimit, reserve }));
+  } catch (error) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+function customerInput(body) {
+  const name = String(body?.name ?? "").trim();
+  const phone = String(body?.phone ?? "").replace(/\D/g, "");
+  if (!name || name.length > 50) return { error: "Name must be 1–50 characters." };
+  if (!/^\d{10,11}$/.test(phone)) return { error: "Phone number must be 10–11 digits." };
+  return { name, phone };
+}
+
+function customerError(response, error) {
+  if (error.code === "ER_DUP_ENTRY") return response.status(409).json({ error: "A client with this phone number already exists." });
+  return response.status(500).json({ error: error.message });
+}
+
+app.get("/api/customers", async (_request, response) => {
+  try {
+    response.json(await listCustomers());
+  } catch (error) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/customers/:id", async (request, response) => {
+  try {
+    const customer = await getCustomer(request.params.id);
+    if (!customer) return response.status(404).json({ error: "Client not found." });
+    response.json(customer);
+  } catch (error) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/customers", async (request, response) => {
+  const input = customerInput(request.body);
+  if (input.error) return response.status(400).json({ error: input.error });
+  try {
+    response.status(201).json(await createCustomer(input));
+  } catch (error) {
+    customerError(response, error);
+  }
+});
+
+app.put("/api/customers/:id", async (request, response) => {
+  const input = customerInput(request.body);
+  if (input.error) return response.status(400).json({ error: input.error });
+  try {
+    const result = await updateCustomer(request.params.id, input);
+    if (!result) return response.status(404).json({ error: "Client not found." });
+    response.json(result);
+  } catch (error) {
+    customerError(response, error);
+  }
+});
+
+app.delete("/api/customers/:id", async (request, response) => {
+  try {
+    if (!(await deleteCustomer(request.params.id))) return response.status(404).json({ error: "Client not found." });
+    response.sendStatus(204);
   } catch (error) {
     response.status(500).json({ error: error.message });
   }

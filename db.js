@@ -112,3 +112,72 @@ export async function getStatus({ date, limit, reserve }) {
     unlinkedCount: unlinkedRows[0].count,
   };
 }
+
+export async function listCustomers() {
+  const [[customers], [measurements]] = await Promise.all([
+    pool.execute("SELECT * FROM customers ORDER BY created_at ASC, id ASC"),
+    pool.execute(
+      "SELECT customer_id, test_at, smm, bfm, pbf, vfa_level, bmr FROM measurements WHERE customer_id IS NOT NULL AND status = 'success' ORDER BY test_at ASC, id ASC",
+    ),
+  ]);
+  const byCustomer = new Map(customers.map((customer) => [customer.id, { ...customer, measurements: [] }]));
+  for (const measurement of measurements) byCustomer.get(measurement.customer_id)?.measurements.push(measurement);
+  return [...byCustomer.values()];
+}
+
+export async function getCustomer(id) {
+  const [[customers], [measurements]] = await Promise.all([
+    pool.execute("SELECT * FROM customers WHERE id = ?", [id]),
+    pool.execute("SELECT * FROM measurements WHERE customer_id = ? ORDER BY test_at DESC, id DESC", [id]),
+  ]);
+  return customers[0] ? { ...customers[0], measurements } : null;
+}
+
+export async function createCustomer({ name, phone }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [result] = await connection.execute("INSERT INTO customers (name, phone) VALUES (?, ?)", [name, phone]);
+    const [linked] = await connection.execute(
+      "UPDATE measurements SET customer_id = ? WHERE customer_id IS NULL AND tel_hp = ?",
+      [result.insertId, phone],
+    );
+    const [customers] = await connection.execute("SELECT * FROM customers WHERE id = ?", [result.insertId]);
+    await connection.commit();
+    return { customer: customers[0], linkedCount: linked.affectedRows };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function updateCustomer(id, { name, phone }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [updated] = await connection.execute("UPDATE customers SET name = ?, phone = ? WHERE id = ?", [name, phone, id]);
+    if (!updated.affectedRows) {
+      await connection.rollback();
+      return null;
+    }
+    const [linked] = await connection.execute(
+      "UPDATE measurements SET customer_id = ? WHERE customer_id IS NULL AND tel_hp = ?",
+      [id, phone],
+    );
+    const [customers] = await connection.execute("SELECT * FROM customers WHERE id = ?", [id]);
+    await connection.commit();
+    return { customer: customers[0], linkedCount: linked.affectedRows };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function deleteCustomer(id) {
+  const [result] = await pool.execute("DELETE FROM customers WHERE id = ?", [id]);
+  return result.affectedRows > 0;
+}
