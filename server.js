@@ -236,12 +236,10 @@ app.post("/api/customers", async (request, response) => {
   if (input.error) return response.status(400).json({ error: input.error });
   try {
     const result = await createCustomer(input);
-    response
-      .status(201)
-      .json({
-        ...result,
-        lbweb: await registerInLbWeb(result.customer, input.lbweb),
-      });
+    response.status(201).json({
+      ...result,
+      lbweb: await registerInLbWeb(result.customer, input.lbweb),
+    });
   } catch (error) {
     customerError(response, error);
   }
