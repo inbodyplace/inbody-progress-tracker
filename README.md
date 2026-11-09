@@ -35,12 +35,12 @@ A webhook does not contain body-composition values. It only says that a measurem
 
 ## Design principle: one action, at most one API call
 
-| Action | InBody API calls |
-| --- | ---: |
-| Incoming webhook | At most 1 |
-| Opening pages | 0 |
-| Add, edit, or delete a client | 0 |
-| Refetch a failed or temporary measurement | At most 1 |
+| Action                                    | InBody API calls |
+| ----------------------------------------- | ---------------: |
+| Incoming webhook                          |        At most 1 |
+| Opening pages                             |                0 |
+| Add, edit, or delete a client             |                0 |
+| Refetch a failed or temporary measurement |        At most 1 |
 
 The normal daily InBody API limit is 500 calls. This app keeps 50 calls in reserve, so it stops at 450 by default. The reserve leaves room for calls made with the same key outside this app, for example in Postman.
 
@@ -67,34 +67,44 @@ npm install
 ### 2. Create the database
 
 `schema.sql` creates both the `inbody_progress_tracker` database and its tables.
-
-In MySQL Workbench, choose **File → Open SQL Script**, open `schema.sql`, and click **Execute**. Or, run this command in a terminal from the project folder and enter the MySQL root password when asked:
+Run this command in a terminal from the project folder, and enter your MySQL root password when asked:
 
 ```bash
-mysql -u root -p < schema.sql
+mysql -u root -p -e "source schema.sql"
 ```
+
+Check that the tables were created:
+
+```bash
+mysql -u root -p -e "SHOW TABLES FROM inbody_progress_tracker;"
+```
+
+You should see `api_usage`, `customers`, and `measurements`.
+
+> **`mysql` is not recognized?** Add the MySQL `bin` folder to your `PATH`, or run the command with the full path.
+> On Windows, the default location is `C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe`.
 
 ### 3. Create `.env`
 
 Copy `.env.example` to `.env`. Fill in the values on the right side of each `=`. Do not commit `.env`; it contains passwords and API keys.
 
-| Key | What to enter |
-| --- | --- |
-| `PORT` | `4174`, unless you need a different local port. |
-| `DB_HOST` | Usually `localhost`. |
-| `DB_PORT` | Usually `3306`. |
-| `DB_USER` | Your MySQL user, often `root` for local development. |
-| `DB_PASSWORD` | Your MySQL password. |
-| `DB_NAME` | `inbody_progress_tracker`. |
-| `INBODY_BASE_URL` | The base URL supplied by InBody Developers. Add `/sandbox` to use its sandbox environment. |
-| `INBODY_ACCOUNT` | Your LB Web account. |
-| `INBODY_API_KEY` | Your InBody Developers API key. |
-| `INBODY_DAILY_LIMIT` | Your daily API-call limit, normally `500`. |
-| `INBODY_RESERVE` | Calls to keep in reserve, normally `50`. |
-| `WEBHOOK_HEADER_NAME` | A header name you choose, such as `X-InBody-Secret`. |
+| Key                    | What to enter                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                 | `4174`, unless you need a different local port.                                                                                                                     |
+| `DB_HOST`              | Usually `localhost`.                                                                                                                                                |
+| `DB_PORT`              | Usually `3306`.                                                                                                                                                     |
+| `DB_USER`              | Your MySQL user, often `root` for local development.                                                                                                                |
+| `DB_PASSWORD`          | Your MySQL password.                                                                                                                                                |
+| `DB_NAME`              | `inbody_progress_tracker`.                                                                                                                                          |
+| `INBODY_BASE_URL`      | The base URL supplied by InBody Developers. Add `/sandbox` to use its sandbox environment.                                                                          |
+| `INBODY_ACCOUNT`       | Your LB Web account.                                                                                                                                                |
+| `INBODY_API_KEY`       | Your InBody Developers API key.                                                                                                                                     |
+| `INBODY_DAILY_LIMIT`   | Your daily API-call limit, normally `500`.                                                                                                                          |
+| `INBODY_RESERVE`       | Calls to keep in reserve, normally `50`.                                                                                                                            |
+| `WEBHOOK_HEADER_NAME`  | A header name you choose, such as `X-InBody-Secret`.                                                                                                                |
 | `WEBHOOK_HEADER_VALUE` | A long random string you choose. Enter the same header name and value in InBody Developers webhook settings. This prevents unknown callers from calling `/webhook`. |
-| `BASIC_AUTH_USER` | The user name your browser asks for when you open the app. |
-| `BASIC_AUTH_PASSWORD` | The password your browser asks for when you open the app. It must not be empty. |
+| `BASIC_AUTH_USER`      | The user name your browser asks for when you open the app.                                                                                                          |
+| `BASIC_AUTH_PASSWORD`  | The password your browser asks for when you open the app. It must not be empty.                                                                                     |
 
 ### 4. Start and sign in
 
@@ -132,11 +142,11 @@ The free ngrok address changes each time ngrok starts. Register the new address 
 
 When you add a client, use the **same phone number** that is entered on the InBody device. Then measure the client using that phone number on the device.
 
-| Event | Linking rule |
-| --- | --- |
-| New webhook | An unlinked measurement is linked when its phone number matches a client. |
-| Add client | Existing unlinked measurements with the same phone number are linked. |
-| Edit phone | Existing linked measurements stay linked. Other unlinked measurements with the new phone number are linked. |
+| Event         | Linking rule                                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| New webhook   | An unlinked measurement is linked when its phone number matches a client.                                                    |
+| Add client    | Existing unlinked measurements with the same phone number are linked.                                                        |
+| Edit phone    | Existing linked measurements stay linked. Other unlinked measurements with the new phone number are linked.                  |
 | Delete client | Measurements stay in MySQL. Their client link is cleared and they link again if you add a client with the same phone number. |
 
 The client detail page compares the first successful measurement with the latest successful measurement. It does not label a change as good or bad.
@@ -160,17 +170,17 @@ inbody-progress-tracker/
 
 ## API endpoints
 
-| Method | Path | Description | InBody calls |
-| --- | --- | --- | ---: |
-| `POST` | `/webhook` | Receives an InBody measurement notification. Uses the webhook header, not Basic Auth. | At most 1 |
-| `GET` | `/api/health` | Checks the MySQL connection. | 0 |
-| `GET` | `/api/status` | Returns daily usage and webhook status. | 0 |
-| `GET` | `/api/customers` | Lists clients and successful measurements. | 0 |
-| `GET` | `/api/customers/:id` | Returns one client and all linked measurements. | 0 |
-| `POST` | `/api/customers` | Adds a client and links matching unlinked measurements. | 0 |
-| `PUT` | `/api/customers/:id` | Updates a client and links newly matching measurements. | 0 |
-| `DELETE` | `/api/customers/:id` | Deletes a client and clears measurement links. | 0 |
-| `POST` | `/api/measurements/:id/refetch` | Retries an `error` or `skipped_temp` measurement. | At most 1 |
+| Method   | Path                            | Description                                                                           | InBody calls |
+| -------- | ------------------------------- | ------------------------------------------------------------------------------------- | -----------: |
+| `POST`   | `/webhook`                      | Receives an InBody measurement notification. Uses the webhook header, not Basic Auth. |    At most 1 |
+| `GET`    | `/api/health`                   | Checks the MySQL connection.                                                          |            0 |
+| `GET`    | `/api/status`                   | Returns daily usage and webhook status.                                               |            0 |
+| `GET`    | `/api/customers`                | Lists clients and successful measurements.                                            |            0 |
+| `GET`    | `/api/customers/:id`            | Returns one client and all linked measurements.                                       |            0 |
+| `POST`   | `/api/customers`                | Adds a client and links matching unlinked measurements.                               |            0 |
+| `PUT`    | `/api/customers/:id`            | Updates a client and links newly matching measurements.                               |            0 |
+| `DELETE` | `/api/customers/:id`            | Deletes a client and clears measurement links.                                        |            0 |
+| `POST`   | `/api/measurements/:id/refetch` | Retries an `error` or `skipped_temp` measurement.                                     |    At most 1 |
 
 ## Troubleshooting
 
