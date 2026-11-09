@@ -101,6 +101,11 @@ async function refreshHeader() {
     clear(header);
     const bar = el("div", { className: "topbar" });
     bar.append(el("a", { className: "brand", href: "#/" }, "InBody Progress Tracker"));
+    if (!status.authEnabled) {
+      const warning = el("p", { className: "message" }, "Basic Auth is off. Set BASIC_AUTH_PASSWORD in .env before exposing this server with ngrok.");
+      Object.assign(warning.style, { background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e" });
+      header.append(warning);
+    }
     const details = el("div", { className: "status" });
     const usage = el("span", {}, `API calls today: ${status.used} / ${status.limit}`);
     usage.append(el("small", {}, ` (${status.reserve} reserved)`));

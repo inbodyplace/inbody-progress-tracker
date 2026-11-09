@@ -1,7 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
+import { timingSafeEqual } from "node:crypto";
 
 dotenv.config();
+
+const basicAuthUser = process.env.BASIC_AUTH_USER || "admin";
+const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD || "";
+const authEnabled = Boolean(basicAuthPassword);
 
 const { createCustomer, deleteCustomer, getCustomer, getStatus, listCustomers, ping, updateCustomer } = await import("./db.js");
 const { createInbodyClient } = await import("./inbody/client.js");
@@ -20,19 +25,16 @@ const client = createInbodyClient({
 });
 const webhook = createWebhookHandler({ client, dailyLimit, reserve });
 
-app.use(express.json());
-app.use(express.static("public"));
+function basicAuth(request, response, next) {
+  const header = request.get("authorization") || "";
+  const actual = Buffer.from(header.startsWith("Basic ") ? header.slice(6) : "", "base64");
+  const expected = Buffer.from(`${basicAuthUser}:${basicAuthPassword}`);
+  if (actual.length === expected.length && timingSafeEqual(actual, expected)) return next();
+  response.set("WWW-Authenticate", 'Basic realm="InBody Progress Tracker"');
+  return response.status(401).send("Authentication required.");
+}
 
-app.get("/api/health", async (_request, response) => {
-  try {
-    await ping();
-    response.json({ ok: true });
-  } catch (error) {
-    response.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-app.post("/webhook", (request, response) => {
+app.post("/webhook", express.json(), (request, response) => {
   if (!webhookHeaderName || !webhookHeaderValue || request.get(webhookHeaderName) !== webhookHeaderValue) {
     console.warn("[webhook] rejected: invalid header");
     response.sendStatus(401);
@@ -46,6 +48,19 @@ app.post("/webhook", (request, response) => {
   void webhook.handleWebhook(request.body).catch((error) => {
     console.error(`[webhook] processing failed for ${maskPhone(request.body.TelHP)}: ${error.message}`);
   });
+});
+
+if (authEnabled) app.use(basicAuth);
+app.use(express.json());
+app.use(express.static("public"));
+
+app.get("/api/health", async (_request, response) => {
+  try {
+    await ping();
+    response.json({ ok: true });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 app.post("/api/measurements/:id/refetch", async (request, response) => {
@@ -63,7 +78,7 @@ app.get("/api/status", async (_request, response) => {
   try {
     const now = new Date();
     const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    response.json(await getStatus({ date, limit: dailyLimit, reserve }));
+    response.json({ ...(await getStatus({ date, limit: dailyLimit, reserve })), authEnabled });
   } catch (error) {
     response.status(500).json({ error: error.message });
   }
@@ -133,5 +148,6 @@ app.delete("/api/customers/:id", async (request, response) => {
 
 app.listen(port, () => {
   console.log(`InBody Progress Tracker: http://localhost:${port}`);
+  if (!authEnabled) console.warn("[auth] Basic Auth is off. Set BASIC_AUTH_PASSWORD in .env before exposing this server (e.g. with ngrok).");
   if (!webhookHeaderValue) console.warn("[webhook] WEBHOOK_HEADER_VALUE is empty; all webhook requests will be rejected.");
 });
