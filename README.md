@@ -104,7 +104,7 @@ Copy `.env.example` to `.env`. Fill in the values on the right side of each `=`.
 | `WEBHOOK_HEADER_NAME`  | A header name you choose, such as `X-InBody-Secret`.                                                                                                                |
 | `WEBHOOK_HEADER_VALUE` | A long random string you choose. Enter the same header name and value in InBody Developers webhook settings. This prevents unknown callers from calling `/webhook`. |
 | `BASIC_AUTH_USER`      | The user name your browser asks for when you open the app.                                                                                                          |
-| `BASIC_AUTH_PASSWORD`  | The password your browser asks for when you open the app. It must not be empty.                                                                                     |
+| `BASIC_AUTH_PASSWORD`  | The password your browser asks for when you open the app. Optional: if empty, Basic Auth is off. **Set it before exposing the app with ngrok.**                     |
 
 ### 4. Start and sign in
 
@@ -112,11 +112,48 @@ Copy `.env.example` to `.env`. Fill in the values on the right side of each `=`.
 npm start
 ```
 
-Open [http://localhost:4174](http://localhost:4174). Your browser asks for `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD`. Enter the values from `.env`.
+Open [http://localhost:4174](http://localhost:4174). If `BASIC_AUTH_PASSWORD` is set, your browser asks for `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD`. Enter the values from `.env`.
+
+If `BASIC_AUTH_PASSWORD` is empty, the app opens without sign-in and shows a yellow warning banner. This is fine on your own computer, but set a password before you expose the app with ngrok.
+
+## Try it without a device
+
+You can see the full flow without an InBody device by using the InBody Developers sandbox.
+The sandbox has one demo member, `sandbox_user`, with two measurements: `20240601120000` and `20240601130000`.
+
+1. In `.env`, set `INBODY_BASE_URL` to the sandbox URL (your base URL + `/sandbox`) and `INBODY_API_KEY` to your test key (`test_...`). Restart the server.
+2. In the app, add a client with the phone number `010-0000-0001`.
+3. Send a sample webhook. Replace `<your value>` with your `WEBHOOK_HEADER_VALUE`.
+
+**macOS / Linux**
+
+```bash
+curl -X POST http://localhost:4174/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-InBody-Secret: <your value>" \
+  -d '{"UserID":"sandbox_user","TelHP":"01000000001","TestDatetimes":"20240601120000","IsTempData":"false"}'
+```
+
+**Windows (PowerShell)**
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:4174/webhook `
+  -ContentType "application/json" `
+  -Headers @{ "X-InBody-Secret" = "<your value>" } `
+  -Body '{"UserID":"sandbox_user","TelHP":"01000000001","TestDatetimes":"20240601120000","IsTempData":"false"}'
+```
+
+4. Send it again with `"TestDatetimes":"20240601130000"`. The client now has two measurements, so the app shows the changes and a chart.
+
+Each webhook uses one API call. Sending the same webhook twice does not call the API again.
+If you changed `WEBHOOK_HEADER_NAME`, use that name instead of `X-InBody-Secret`.
+If nothing changes in the app, that measurement may already be stored from an earlier try. The app skips measurements it already has, so it does not call the API again. Delete the client and its measurements, or try the other measurement time.
 
 ## Receive webhooks with ngrok
 
 `localhost` is only available on your computer. ngrok creates a temporary public address so the InBody server can send a webhook to your app.
+
+> **Before you start:** set `BASIC_AUTH_PASSWORD` in `.env`. Without it, anyone with the ngrok address can open the app and its API.
 
 1. Create an account at [ngrok](https://ngrok.com/) and install ngrok.
 2. Copy your ngrok authtoken from the ngrok dashboard. In a terminal, run:
